@@ -346,9 +346,9 @@
                 if (isVideo) {
                     let videoSrc = media.data;
                     if (media.fromDrive && media.driveId) {
-                        // Usar proxy CORS para videos de Drive
+                        // Usar proxy CORS alternativo para videos de Drive
                         const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
-                        videoSrc = `https://corsproxy.io/?${encodeURIComponent(driveUrl)}`;
+                        videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
                     }
                     
                     item.innerHTML = `
@@ -462,9 +462,9 @@
                 // Para videos de Drive, usar proxy para evitar CORS
                 let videoSrc = media.data || media.url || '';
                 if (media.fromDrive && media.driveId) {
-                    // Usar proxy CORS para videos de Drive
+                    // Usar proxy CORS alternativo para videos de Drive
                     const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
-                    videoSrc = `https://corsproxy.io/?${encodeURIComponent(driveUrl)}`;
+                    videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
                 }
                 
                 video.innerHTML = `
