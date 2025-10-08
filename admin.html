@@ -635,8 +635,9 @@
             images.forEach((img) => {
                 const item = document.createElement('div');
                 item.className = 'image-item';
+                
                 item.innerHTML = `
-                    <img src="${img.data}" alt="${img.name}">
+                    <img src="${img.data}" alt="${img.name}" loading="lazy">
                     <button class="delete-btn" onclick="deleteImage(${img.id})">×</button>
                 `;
                 imageList.appendChild(item);
@@ -670,7 +671,7 @@
                 return;
             }
 
-            showStatus('⏳ Cargando imágenes desde Google Drive...', 'info');
+            showStatus('⏳ Cargando y convirtiendo imágenes desde Drive...', 'info');
 
             try {
                 const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&key=${apiKey}&fields=files(id,name,mimeType,thumbnailLink,webContentLink)`;
@@ -688,27 +689,66 @@
                     return;
                 }
 
-                // Guardar información de las imágenes de Drive
+                // Limpiar imágenes existentes de Drive
                 let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
+                images = images.filter(img => !img.fromDrive);
                 
+                // Procesar cada archivo y convertir a base64
+                let processedCount = 0;
+                const totalFiles = data.files.length;
+
                 for (const file of data.files) {
-                    // Verificar si ya existe
-                    const exists = images.some(img => img.driveId === file.id);
-                    if (!exists) {
-                        images.push({
-                            id: Date.now() + Math.random(),
-                            name: file.name,
-                            driveId: file.id,
-                            data: `https://drive.google.com/uc?export=view&id=${file.id}`,
-                            uploadDate: new Date().toISOString(),
-                            fromDrive: true
-                        });
+                    try {
+                        // Usar webContentLink para descargar la imagen
+                        const imageUrl = file.webContentLink || `https://drive.google.com/uc?export=download&id=${file.id}`;
+                        
+                        // Descargar y convertir a base64
+                        const imageResponse = await fetch(imageUrl);
+                        if (imageResponse.ok) {
+                            const blob = await imageResponse.blob();
+                            const reader = new FileReader();
+                            
+                            reader.onload = function(e) {
+                                images.push({
+                                    id: Date.now() + Math.random(),
+                                    name: file.name,
+                                    driveId: file.id,
+                                    data: e.target.result, // Base64
+                                    uploadDate: new Date().toISOString(),
+                                    fromDrive: true
+                                });
+                                
+                                processedCount++;
+                                
+                                // Actualizar progreso
+                                showStatus(`⏳ Procesando imagen ${processedCount}/${totalFiles}...`, 'info');
+                                
+                                if (processedCount === totalFiles) {
+                                    localStorage.setItem('displayImages', JSON.stringify(images));
+                                    loadImages();
+                                    showStatus(`✅ ${totalFiles} imagen(es) cargadas y convertidas desde Drive`, 'success');
+                                }
+                            };
+                            
+                            reader.readAsDataURL(blob);
+                        } else {
+                            processedCount++;
+                            if (processedCount === totalFiles) {
+                                localStorage.setItem('displayImages', JSON.stringify(images));
+                                loadImages();
+                                showStatus(`✅ ${processedCount} imagen(es) procesadas (algunas pueden tener errores)`, 'success');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error procesando archivo:', file.name, error);
+                        processedCount++;
+                        if (processedCount === totalFiles) {
+                            localStorage.setItem('displayImages', JSON.stringify(images));
+                            loadImages();
+                            showStatus(`⚠️ ${processedCount} imagen(es) procesadas (algunas con errores)`, 'error');
+                        }
                     }
                 }
-
-                localStorage.setItem('displayImages', JSON.stringify(images));
-                loadImages();
-                showStatus(`✅ ${data.files.length} imagen(es) cargadas desde Drive`, 'success');
 
             } catch (error) {
                 console.error('Error:', error);
