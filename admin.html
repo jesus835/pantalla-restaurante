@@ -636,10 +636,22 @@
                 const item = document.createElement('div');
                 item.className = 'image-item';
                 
-                item.innerHTML = `
-                    <img src="${img.data}" alt="${img.name}" loading="lazy">
-                    <button class="delete-btn" onclick="deleteImage(${img.id})">×</button>
-                `;
+                // Para Drive, mostrar placeholder con nombre del archivo
+                if (img.fromDrive) {
+                    item.innerHTML = `
+                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 10px; box-sizing: border-box;">
+                            <div style="font-size: 24px; margin-bottom: 10px;">📁</div>
+                            <div style="font-size: 12px; font-weight: bold; word-break: break-word;">${img.name}</div>
+                            <div style="font-size: 10px; opacity: 0.8; margin-top: 5px;">Drive</div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteImage(${img.id})">×</button>
+                    `;
+                } else {
+                    item.innerHTML = `
+                        <img src="${img.data}" alt="${img.name}" loading="lazy">
+                        <button class="delete-btn" onclick="deleteImage(${img.id})">×</button>
+                    `;
+                }
                 imageList.appendChild(item);
             });
         }
@@ -671,7 +683,7 @@
                 return;
             }
 
-            showStatus('⏳ Cargando y convirtiendo imágenes desde Drive...', 'info');
+            showStatus('⏳ Cargando lista de imágenes desde Drive...', 'info');
 
             try {
                 const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&key=${apiKey}&fields=files(id,name,mimeType,thumbnailLink,webContentLink)`;
@@ -693,62 +705,21 @@
                 let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
                 images = images.filter(img => !img.fromDrive);
                 
-                // Procesar cada archivo y convertir a base64
-                let processedCount = 0;
-                const totalFiles = data.files.length;
-
+                // Agregar solo las referencias de Drive (sin descargar)
                 for (const file of data.files) {
-                    try {
-                        // Usar webContentLink para descargar la imagen
-                        const imageUrl = file.webContentLink || `https://drive.google.com/uc?export=download&id=${file.id}`;
-                        
-                        // Descargar y convertir a base64
-                        const imageResponse = await fetch(imageUrl);
-                        if (imageResponse.ok) {
-                            const blob = await imageResponse.blob();
-                            const reader = new FileReader();
-                            
-                            reader.onload = function(e) {
-                                images.push({
-                                    id: Date.now() + Math.random(),
-                                    name: file.name,
-                                    driveId: file.id,
-                                    data: e.target.result, // Base64
-                                    uploadDate: new Date().toISOString(),
-                                    fromDrive: true
-                                });
-                                
-                                processedCount++;
-                                
-                                // Actualizar progreso
-                                showStatus(`⏳ Procesando imagen ${processedCount}/${totalFiles}...`, 'info');
-                                
-                                if (processedCount === totalFiles) {
-                                    localStorage.setItem('displayImages', JSON.stringify(images));
-                                    loadImages();
-                                    showStatus(`✅ ${totalFiles} imagen(es) cargadas y convertidas desde Drive`, 'success');
-                                }
-                            };
-                            
-                            reader.readAsDataURL(blob);
-                        } else {
-                            processedCount++;
-                            if (processedCount === totalFiles) {
-                                localStorage.setItem('displayImages', JSON.stringify(images));
-                                loadImages();
-                                showStatus(`✅ ${processedCount} imagen(es) procesadas (algunas pueden tener errores)`, 'success');
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error procesando archivo:', file.name, error);
-                        processedCount++;
-                        if (processedCount === totalFiles) {
-                            localStorage.setItem('displayImages', JSON.stringify(images));
-                            loadImages();
-                            showStatus(`⚠️ ${processedCount} imagen(es) procesadas (algunas con errores)`, 'error');
-                        }
-                    }
+                    images.push({
+                        id: Date.now() + Math.random(),
+                        name: file.name,
+                        driveId: file.id,
+                        data: `https://drive.google.com/uc?export=view&id=${file.id}`,
+                        uploadDate: new Date().toISOString(),
+                        fromDrive: true
+                    });
                 }
+
+                localStorage.setItem('displayImages', JSON.stringify(images));
+                loadImages();
+                showStatus(`✅ ${data.files.length} imagen(es) agregadas desde Drive. Las pantallas las cargarán automáticamente.`, 'success');
 
             } catch (error) {
                 console.error('Error:', error);
