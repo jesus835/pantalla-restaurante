@@ -745,10 +745,14 @@
                     const isVideo = file.mimeType && file.mimeType.startsWith('video/');
                     const isImage = file.mimeType && file.mimeType.startsWith('image/');
                     
-                    // Para videos usar URL directa, para imágenes usar proxy
-                    const mediaUrl = isVideo 
-                        ? `https://drive.google.com/uc?export=download&id=${file.id}`
-                        : `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${file.id}`)}`;
+                    // Para videos usar múltiples URLs, para imágenes usar proxy
+                    let mediaUrl;
+                    if (isVideo) {
+                        // Usar webContentLink que funciona inmediatamente para videos
+                        mediaUrl = file.webContentLink || `https://drive.google.com/uc?export=download&id=${file.id}`;
+                    } else {
+                        mediaUrl = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${file.id}`)}`;
+                    }
                     
                     images.push({
                         id: Date.now() + Math.random(),
@@ -758,7 +762,8 @@
                         uploadDate: new Date().toISOString(),
                         fromDrive: true,
                         isVideo: isVideo,
-                        isImage: isImage
+                        isImage: isImage,
+                        webContentLink: file.webContentLink // Guardar para uso alternativo
                     });
                 }
 
