@@ -237,9 +237,15 @@
                 if (index === currentSlide) {
                     slide.classList.add('active');
                 }
-                // Soportar tanto imágenes locales (base64) como de Drive (URL)
-                const imgSrc = img.data || img.url || '';
-                slide.innerHTML = `<img src="${imgSrc}" alt="${img.name}" crossorigin="anonymous">`;
+                
+                // Para imágenes de Drive, usar proxy para evitar CORS
+                let imgSrc = img.data || img.url || '';
+                if (img.fromDrive && img.driveId) {
+                    // Usar múltiples proxies como fallback
+                    imgSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${img.driveId}`)}`;
+                }
+                
+                slide.innerHTML = `<img src="${imgSrc}" alt="${img.name}" crossorigin="anonymous" onerror="this.onerror=null; this.src='https://cors-anywhere.herokuapp.com/${img.data || ''}';" onload="console.log('Imagen cargada:', this.src)">`;
                 container.appendChild(slide);
             });
 

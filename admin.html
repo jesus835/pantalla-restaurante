@@ -636,10 +636,13 @@
                 const item = document.createElement('div');
                 item.className = 'image-item';
                 
-                // Para Drive, mostrar placeholder con nombre del archivo
+                // Para Drive, intentar mostrar la imagen con proxy
                 if (img.fromDrive) {
                     item.innerHTML = `
-                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 10px; box-sizing: border-box;">
+                        <img src="${img.data}" alt="${img.name}" loading="lazy" 
+                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                             style="width: 100%; height: 100%; object-fit: cover;">
+                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: none; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 10px; box-sizing: border-box; position: absolute; top: 0; left: 0;">
                             <div style="font-size: 24px; margin-bottom: 10px;">📁</div>
                             <div style="font-size: 12px; font-weight: bold; word-break: break-word;">${img.name}</div>
                             <div style="font-size: 10px; opacity: 0.8; margin-top: 5px;">Drive</div>
@@ -705,13 +708,13 @@
                 let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
                 images = images.filter(img => !img.fromDrive);
                 
-                // Agregar solo las referencias de Drive (sin descargar)
+                // Agregar referencias de Drive con proxy para evitar CORS
                 for (const file of data.files) {
                     images.push({
                         id: Date.now() + Math.random(),
                         name: file.name,
                         driveId: file.id,
-                        data: `https://drive.google.com/uc?export=view&id=${file.id}`,
+                        data: `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${file.id}`)}`,
                         uploadDate: new Date().toISOString(),
                         fromDrive: true
                     });
