@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pantalla Digital - Comida Rápida</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'TT Lakes Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .slideshow-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide.active {
+            opacity: 1;
+            z-index: 1;
+        }
+
+        .slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .no-images {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            font-size: 32px;
+            z-index: 10;
+        }
+
+        .no-images-icon {
+            font-size: 120px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        body:hover .controls {
+            opacity: 1;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 255, 0, 0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        body:hover .status-indicator {
+            opacity: 1;
+        }
+
+        .image-counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        body:hover .image-counter {
+            opacity: 1;
+        }
+
+        /* Loading animation */
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 5;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="slideshow-container" id="slideshowContainer">
+        <div class="no-images" id="noImages">
+            <div class="no-images-icon">🍔</div>
+            <div>No hay imágenes para mostrar</div>
+            <div style="font-size: 18px; margin-top: 15px; opacity: 0.7;">
+                Sube imágenes desde el panel de administración
+            </div>
+        </div>
+    </div>
+
+    <div class="status-indicator" id="statusIndicator">
+        🟢 Conectado
+    </div>
+
+    <div class="image-counter" id="imageCounter">
+        0 imágenes
+    </div>
+
+    <div class="controls">
+        <button class="control-btn" onclick="previousSlide()">◀ Anterior</button>
+        <button class="control-btn" onclick="togglePlayPause()" id="playPauseBtn">⏸ Pausar</button>
+        <button class="control-btn" onclick="nextSlide()">Siguiente ▶</button>
+        <button class="control-btn" onclick="refreshImages()">🔄 Actualizar</button>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        let images = [];
+        let isPlaying = true;
+        let slideInterval;
+        const SLIDE_DURATION = 5000; // 5 segundos por imagen
+        const REFRESH_INTERVAL = 10000; // Revisar nuevas imágenes cada 10 segundos
+
+        // Inicializar
+        window.addEventListener('load', () => {
+            loadImages();
+            startAutoRefresh();
+        });
+
+        // Cargar imágenes desde localStorage
+        function loadImages() {
+            const storedImages = JSON.parse(localStorage.getItem('displayImages') || '[]');
+            
+            if (JSON.stringify(storedImages) !== JSON.stringify(images)) {
+                images = storedImages;
+                updateDisplay();
+            }
+        }
+
+        // Actualizar visualización
+        function updateDisplay() {
+            const container = document.getElementById('slideshowContainer');
+            const noImages = document.getElementById('noImages');
+            const imageCounter = document.getElementById('imageCounter');
+
+            // Limpiar slides existentes
+            const existingSlides = container.querySelectorAll('.slide');
+            existingSlides.forEach(slide => slide.remove());
+
+            if (images.length === 0) {
+                noImages.style.display = 'block';
+                imageCounter.textContent = '0 imágenes';
+                stopSlideshow();
+                return;
+            }
+
+            noImages.style.display = 'none';
+            imageCounter.textContent = `${images.length} imagen${images.length !== 1 ? 'es' : ''}`;
+
+            // Crear slides
+            images.forEach((img, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'slide';
+                if (index === currentSlide) {
+                    slide.classList.add('active');
+                }
+                // Soportar tanto imágenes locales (base64) como de Drive (URL)
+                const imgSrc = img.data || img.url || '';
+                slide.innerHTML = `<img src="${imgSrc}" alt="${img.name}" crossorigin="anonymous">`;
+                container.appendChild(slide);
+            });
+
+            // Iniciar slideshow si está en play
+            if (isPlaying && images.length > 1) {
+                startSlideshow();
+            }
+        }
+
+        // Iniciar slideshow automático
+        function startSlideshow() {
+            stopSlideshow();
+            if (images.length > 1) {
+                slideInterval = setInterval(() => {
+                    nextSlide();
+                }, SLIDE_DURATION);
+            }
+        }
+
+        // Detener slideshow
+        function stopSlideshow() {
+            if (slideInterval) {
+                clearInterval(slideInterval);
+                slideInterval = null;
+            }
+        }
+
+        // Siguiente slide
+        function nextSlide() {
+            if (images.length === 0) return;
+            
+            const slides = document.querySelectorAll('.slide');
+            slides[currentSlide].classList.remove('active');
+            
+            currentSlide = (currentSlide + 1) % images.length;
+            slides[currentSlide].classList.add('active');
+        }
+
+        // Slide anterior
+        function previousSlide() {
+            if (images.length === 0) return;
+            
+            const slides = document.querySelectorAll('.slide');
+            slides[currentSlide].classList.remove('active');
+            
+            currentSlide = (currentSlide - 1 + images.length) % images.length;
+            slides[currentSlide].classList.add('active');
+        }
+
+        // Toggle play/pause
+        function togglePlayPause() {
+            const btn = document.getElementById('playPauseBtn');
+            isPlaying = !isPlaying;
+            
+            if (isPlaying) {
+                btn.textContent = '⏸ Pausar';
+                startSlideshow();
+            } else {
+                btn.textContent = '▶ Reproducir';
+                stopSlideshow();
+            }
+        }
+
+        // Actualizar imágenes manualmente
+        function refreshImages() {
+            loadImages();
+            const status = document.getElementById('statusIndicator');
+            status.textContent = '🔄 Actualizando...';
+            setTimeout(() => {
+                status.textContent = '🟢 Conectado';
+            }, 1000);
+        }
+
+        // Auto-refresh cada X segundos
+        function startAutoRefresh() {
+            setInterval(() => {
+                loadImages();
+            }, REFRESH_INTERVAL);
+        }
+
+        // Controles de teclado
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowLeft':
+                    previousSlide();
+                    break;
+                case 'ArrowRight':
+                    nextSlide();
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    togglePlayPause();
+                    break;
+                case 'r':
+                case 'R':
+                    refreshImages();
+                    break;
+            }
+        });
+
+        // Detectar cambios en localStorage desde otras pestañas
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'displayImages') {
+                loadImages();
+            }
+        });
+    </script>
+</body>
+</html>
