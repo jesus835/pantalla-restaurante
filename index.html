@@ -340,8 +340,12 @@
                 item.className = 'media-item';
                 item.dataset.mediaId = media.id;
                 
-                // Determinar si es video
-                const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
+                // Determinar si es video (incluyendo GIFs animados)
+                const isVideo = media.isVideo || (media.name && (
+                    media.name.toLowerCase().includes('.mp4') || 
+                    media.name.toLowerCase().includes('.webm') ||
+                    media.name.toLowerCase().includes('.gif')
+                ));
                 
                 if (isVideo) {
                     let videoSrc = media.data;
@@ -435,56 +439,98 @@
             const slide = document.createElement('div');
             slide.className = 'slide active';
             
-            // Determinar si es video o imagen
-            const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
+            // Determinar si es video o imagen (incluyendo GIFs animados)
+            const isVideo = media.isVideo || (media.name && (
+                media.name.toLowerCase().includes('.mp4') || 
+                media.name.toLowerCase().includes('.webm') ||
+                media.name.toLowerCase().includes('.gif')
+            ));
             
             if (isVideo) {
-                // Mostrar botón de play/pause para videos
-                playPauseBtn.style.display = 'inline-block';
-                playPauseBtn.textContent = '⏸ Pausar';
-                
-                // Crear elemento de video
-                const video = document.createElement('video');
-                video.muted = true;
-                video.autoplay = true;
-                video.loop = true;
-                video.playsInline = true; // Para móviles
-                video.style.width = '100%';
-                video.style.height = '100%';
-                video.style.objectFit = 'contain';
-                
-                // Asegurar loop infinito
-                video.addEventListener('ended', () => {
-                    video.currentTime = 0;
-                    video.play();
-                });
-                
-                // Para videos de Drive, usar proxy para evitar CORS
-                let videoSrc = media.data || media.url || '';
-                if (media.fromDrive && media.driveId) {
-                    // Usar proxy CORS alternativo para videos de Drive
-                    const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
-                    videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
+                // Mostrar botón de play/pause solo para videos (no GIFs)
+                if (!media.name.toLowerCase().includes('.gif')) {
+                    playPauseBtn.style.display = 'inline-block';
+                    playPauseBtn.textContent = '⏸ Pausar';
+                } else {
+                    playPauseBtn.style.display = 'none'; // GIFs no necesitan control
                 }
                 
-                video.innerHTML = `
-                    <source src="${videoSrc}" type="video/mp4">
-                    <source src="${videoSrc}" type="video/webm">
-                `;
+                // Crear elemento de video o img según el tipo
+                let mediaElement;
                 
-                // Forzar reproducción en loop
-                video.addEventListener('loadeddata', () => {
-                    video.loop = true;
-                    video.play();
-                });
+                if (media.name.toLowerCase().includes('.gif')) {
+                    // Para GIFs, usar img tag (reproduce automáticamente)
+                    mediaElement = document.createElement('img');
+                    mediaElement.style.width = '100%';
+                    mediaElement.style.height = '100%';
+                    mediaElement.style.objectFit = 'contain';
+                    mediaElement.src = videoSrc;
+                    mediaElement.alt = media.name;
+                } else {
+                    // Para videos MP4/WebM, usar video tag
+                    mediaElement = document.createElement('video');
+                    mediaElement.muted = true;
+                    mediaElement.autoplay = true;
+                    mediaElement.loop = true;
+                    mediaElement.playsInline = true; // Para móviles
+                    mediaElement.style.width = '100%';
+                    mediaElement.style.height = '100%';
+                    mediaElement.style.objectFit = 'contain';
+                }
                 
-                // Manejar errores de video
-                video.addEventListener('error', (e) => {
-                    console.error('Error cargando video:', e);
-                    imageCounter.textContent = `❌ Error cargando video: ${media.name}`;
-                });
+                // Para videos/GIFs de Drive, usar proxy para evitar CORS
+                let videoSrc = media.data || media.url || '';
+                if (media.fromDrive && media.driveId) {
+                    // Para GIFs, usar view directo (funciona mejor)
+                    if (media.name.toLowerCase().includes('.gif')) {
+                        videoSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${media.driveId}`)}`;
+                    } else {
+                        // Para videos MP4/WebM, usar proxy
+                        const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
+                        videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
+                    }
+                }
                 
-                slide.appendChild(video);
+                // Configurar según el tipo de archivo
+                if (media.name.toLowerCase().includes('.gif')) {
+                    // Para GIFs, usar img tag (reproduce automáticamente)
+                    mediaElement.src = videoSrc;
+                    mediaElement.alt = media.name;
+                    
+                    // Manejar errores de GIF
+                    mediaElement.addEventListener('error', (e) => {
+                        console.error('Error cargando GIF:', e);
+                        imageCounter.textContent = `❌ Error cargando GIF: ${media.name}`;
+                    });
+                } else {
+                    // Para videos MP4/WebM, usar video tag
+                    const video = mediaElement;
+                    
+                    // Asegurar loop infinito
+                    video.addEventListener('ended', () => {
+                        video.currentTime = 0;
+                        video.play();
+                    });
+                    
+                    video.innerHTML = `
+                        <source src="${videoSrc}" type="video/mp4">
+                        <source src="${videoSrc}" type="video/webm">
+                    `;
+                    
+                    // Forzar reproducción en loop
+                    video.addEventListener('loadeddata', () => {
+                        video.loop = true;
+                        video.play();
+                    });
+                    
+                    // Manejar errores de video
+                    video.addEventListener('error', (e) => {
+                        console.error('Error cargando video:', e);
+                        imageCounter.textContent = `❌ Error cargando video: ${media.name}`;
+                    });
+                }
+                
+                slide.appendChild(mediaElement);
             } else {
                 // Ocultar botón de play/pause para imágenes
                 playPauseBtn.style.display = 'none';
