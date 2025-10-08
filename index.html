@@ -44,7 +44,8 @@
             z-index: 1;
         }
 
-        .slide img {
+        .slide img,
+        .slide video {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
@@ -74,12 +75,8 @@
             display: flex;
             gap: 10px;
             z-index: 100;
-            opacity: 0;
+            opacity: 1; /* Siempre visible */
             transition: opacity 0.3s ease;
-        }
-
-        body:hover .controls {
-            opacity: 1;
         }
 
         .control-btn {
@@ -97,6 +94,119 @@
         .control-btn:hover {
             background: rgba(255, 255, 255, 0.3);
             transform: translateY(-2px);
+        }
+
+        .control-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+        }
+
+        .media-selector {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow-y: auto;
+            z-index: 200;
+            display: none;
+        }
+
+        .media-selector.show {
+            display: block;
+        }
+
+        .media-selector h3 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .media-item {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            background: #f0f0f0;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            border: 3px solid transparent;
+        }
+
+        .media-item:hover {
+            transform: scale(1.05);
+        }
+
+        .media-item.selected {
+            border-color: #667eea;
+        }
+
+        .media-item img,
+        .media-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .media-item .video-indicator {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+        }
+
+        .selector-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .selector-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .selector-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .selector-btn.secondary {
+            background: #6c757d;
+        }
+
+        .close-selector {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
         }
 
         .status-indicator {
@@ -180,16 +290,25 @@
     </div>
 
     <div class="controls">
-        <button class="control-btn" onclick="previousSlide()">◀ Anterior</button>
-        <button class="control-btn" onclick="togglePlayPause()" id="playPauseBtn">⏸ Pausar</button>
-        <button class="control-btn" onclick="nextSlide()">Siguiente ▶</button>
+        <button class="control-btn" onclick="openMediaSelector()">📁 Seleccionar</button>
+        <button class="control-btn" onclick="togglePlayPause()" id="playPauseBtn">▶ Reproducir</button>
         <button class="control-btn" onclick="refreshImages()">🔄 Actualizar</button>
+    </div>
+
+    <div class="media-selector" id="mediaSelector">
+        <button class="close-selector" onclick="closeMediaSelector()">×</button>
+        <h3>🎯 Selecciona el contenido para esta pantalla</h3>
+        <div class="media-grid" id="mediaGrid"></div>
+        <div class="selector-controls">
+            <button class="selector-btn" onclick="confirmSelection()">✅ Confirmar</button>
+            <button class="selector-btn secondary" onclick="closeMediaSelector()">❌ Cancelar</button>
+        </div>
     </div>
 
     <script>
         let currentSlide = 0;
         let images = [];
-        let isPlaying = true;
+        let isPlaying = false; // Desactivado por defecto
         let slideInterval;
         const SLIDE_DURATION = 5000; // 5 segundos por imagen
         const REFRESH_INTERVAL = 10000; // Revisar nuevas imágenes cada 10 segundos
@@ -197,21 +316,102 @@
         // Inicializar
         window.addEventListener('load', () => {
             loadImages();
+            loadSelectedMedia();
             startAutoRefresh();
         });
 
         // Cargar imágenes desde localStorage
         function loadImages() {
             const storedImages = JSON.parse(localStorage.getItem('displayImages') || '[]');
+            images = storedImages;
+        }
+
+        // Abrir selector de media
+        function openMediaSelector() {
+            const selector = document.getElementById('mediaSelector');
+            const mediaGrid = document.getElementById('mediaGrid');
             
-            if (JSON.stringify(storedImages) !== JSON.stringify(images)) {
-                images = storedImages;
-                updateDisplay();
+            // Limpiar grid
+            mediaGrid.innerHTML = '';
+            
+            // Agregar todas las opciones disponibles
+            images.forEach((media, index) => {
+                const item = document.createElement('div');
+                item.className = 'media-item';
+                item.dataset.mediaId = media.id;
+                
+                // Determinar si es video
+                const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
+                
+                if (isVideo) {
+                    item.innerHTML = `
+                        <video style="width: 100%; height: 100%; object-fit: cover;" muted loop playsinline autoplay>
+                            <source src="${media.data}" type="video/mp4">
+                            <source src="${media.data}" type="video/webm">
+                        </video>
+                        <div class="video-indicator">🎥</div>
+                    `;
+                } else {
+                    let imgSrc = media.data;
+                    if (media.fromDrive && media.driveId) {
+                        imgSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${media.driveId}`)}`;
+                    }
+                    item.innerHTML = `<img src="${imgSrc}" alt="${media.name}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                }
+                
+                // Click para seleccionar
+                item.addEventListener('click', () => {
+                    // Quitar selección anterior
+                    document.querySelectorAll('.media-item').forEach(el => el.classList.remove('selected'));
+                    // Seleccionar actual
+                    item.classList.add('selected');
+                });
+                
+                mediaGrid.appendChild(item);
+            });
+            
+            selector.classList.add('show');
+        }
+
+        // Cerrar selector de media
+        function closeMediaSelector() {
+            const selector = document.getElementById('mediaSelector');
+            selector.classList.remove('show');
+        }
+
+        // Confirmar selección
+        function confirmSelection() {
+            const selectedItem = document.querySelector('.media-item.selected');
+            if (selectedItem) {
+                const mediaId = selectedItem.dataset.mediaId;
+                localStorage.setItem('selectedMediaId', mediaId);
+                
+                // Recargar la pantalla con la nueva selección
+                loadSelectedMedia();
+                closeMediaSelector();
             }
         }
 
-        // Actualizar visualización
-        function updateDisplay() {
+        // Cargar media seleccionada
+        function loadSelectedMedia() {
+            const selectedMediaId = localStorage.getItem('selectedMediaId');
+            if (selectedMediaId) {
+                // Buscar la media seleccionada
+                const allMedia = JSON.parse(localStorage.getItem('displayImages') || '[]');
+                const selectedMedia = allMedia.find(media => media.id == selectedMediaId);
+                
+                if (selectedMedia) {
+                    displaySingleMedia(selectedMedia);
+                } else {
+                    showNoMedia();
+                }
+            } else {
+                showNoMedia();
+            }
+        }
+
+        // Mostrar una sola media (imagen o video)
+        function displaySingleMedia(media) {
             const container = document.getElementById('slideshowContainer');
             const noImages = document.getElementById('noImages');
             const imageCounter = document.getElementById('imageCounter');
@@ -220,39 +420,96 @@
             const existingSlides = container.querySelectorAll('.slide');
             existingSlides.forEach(slide => slide.remove());
 
-            if (images.length === 0) {
-                noImages.style.display = 'block';
-                imageCounter.textContent = '0 imágenes';
-                stopSlideshow();
-                return;
-            }
-
             noImages.style.display = 'none';
-            imageCounter.textContent = `${images.length} imagen${images.length !== 1 ? 'es' : ''}`;
+            imageCounter.textContent = `📺 ${media.name}`;
 
-            // Crear slides
-            images.forEach((img, index) => {
-                const slide = document.createElement('div');
-                slide.className = 'slide';
-                if (index === currentSlide) {
-                    slide.classList.add('active');
+            // Crear slide único
+            const slide = document.createElement('div');
+            slide.className = 'slide active';
+            
+            // Determinar si es video o imagen
+            const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
+            
+            if (isVideo) {
+                // Crear elemento de video
+                const video = document.createElement('video');
+                video.muted = true;
+                video.autoplay = true;
+                video.loop = true;
+                video.playsInline = true; // Para móviles
+                video.style.width = '100%';
+                video.style.height = '100%';
+                video.style.objectFit = 'contain';
+                
+                // Asegurar loop infinito
+                video.addEventListener('ended', () => {
+                    video.currentTime = 0;
+                    video.play();
+                });
+                
+                // Para videos de Drive, usar URL directa
+                let videoSrc = media.data || media.url || '';
+                if (media.fromDrive && media.driveId) {
+                    videoSrc = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
                 }
                 
-                // Para imágenes de Drive, usar proxy para evitar CORS
-                let imgSrc = img.data || img.url || '';
-                if (img.fromDrive && img.driveId) {
-                    // Usar múltiples proxies como fallback
-                    imgSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${img.driveId}`)}`;
+                video.innerHTML = `
+                    <source src="${videoSrc}" type="video/mp4">
+                    <source src="${videoSrc}" type="video/webm">
+                `;
+                
+                // Forzar reproducción en loop
+                video.addEventListener('loadeddata', () => {
+                    video.loop = true;
+                    video.play();
+                });
+                
+                slide.appendChild(video);
+            } else {
+                // Crear elemento de imagen
+                let imgSrc = media.data || media.url || '';
+                if (media.fromDrive && media.driveId) {
+                    // Usar proxy para imágenes
+                    imgSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${media.driveId}`)}`;
                 }
                 
-                slide.innerHTML = `<img src="${imgSrc}" alt="${img.name}" crossorigin="anonymous" onerror="this.onerror=null; this.src='https://cors-anywhere.herokuapp.com/${img.data || ''}';" onload="console.log('Imagen cargada:', this.src)">`;
-                container.appendChild(slide);
-            });
-
-            // Iniciar slideshow si está en play
-            if (isPlaying && images.length > 1) {
-                startSlideshow();
+                const imgElement = document.createElement('img');
+                imgElement.src = imgSrc;
+                imgElement.alt = media.name;
+                imgElement.crossOrigin = 'anonymous';
+                imgElement.style.width = '100%';
+                imgElement.style.height = '100%';
+                imgElement.style.objectFit = 'contain';
+                
+                // Fallback si la imagen no carga
+                imgElement.onerror = function() {
+                    this.onerror = null;
+                    this.src = `https://cors-anywhere.herokuapp.com/${media.data || ''}`;
+                };
+                
+                slide.appendChild(imgElement);
             }
+            
+            container.appendChild(slide);
+        }
+
+        // Mostrar pantalla sin contenido
+        function showNoMedia() {
+            const container = document.getElementById('slideshowContainer');
+            const noImages = document.getElementById('noImages');
+            const imageCounter = document.getElementById('imageCounter');
+
+            // Limpiar slides existentes
+            const existingSlides = container.querySelectorAll('.slide');
+            existingSlides.forEach(slide => slide.remove());
+
+            noImages.style.display = 'block';
+            imageCounter.textContent = '0 contenido';
+        }
+
+        // Actualizar visualización (ahora solo para mostrar todas las opciones)
+        function updateDisplay() {
+            loadImages();
         }
 
         // Iniciar slideshow automático
@@ -319,10 +576,17 @@
             }, 1000);
         }
 
-        // Auto-refresh cada X segundos
+        // Auto-refresh cada X segundos (solo actualiza la lista, no cambia la selección)
         function startAutoRefresh() {
             setInterval(() => {
-                loadImages();
+                const storedImages = JSON.parse(localStorage.getItem('displayImages') || '[]');
+                if (JSON.stringify(storedImages) !== JSON.stringify(images)) {
+                    images = storedImages;
+                    // Si no hay media seleccionada, mostrar selector
+                    if (!localStorage.getItem('selectedMediaId')) {
+                        showNoMedia();
+                    }
+                }
             }, REFRESH_INTERVAL);
         }
 
@@ -350,6 +614,10 @@
         window.addEventListener('storage', (e) => {
             if (e.key === 'displayImages') {
                 loadImages();
+                // Si no hay media seleccionada, mostrar selector
+                if (!localStorage.getItem('selectedMediaId')) {
+                    showNoMedia();
+                }
             }
         });
     </script>
