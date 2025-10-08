@@ -257,33 +257,41 @@
         <div class="card">
             <h2>📤 Subir Nueva Imagen</h2>
             
-    <div class="config-section">
-        <h3>⚙️ Configuración de Google Drive</h3>
-        <div class="input-group">
-            <label>ID de Carpeta de Google Drive:</label>
-            <input type="text" id="folderId" placeholder="Pega aquí el ID de tu carpeta de Drive" value="1cRVI_EL8CWK4jPo9Ah8w57D_AKXl2W3C">
-        </div>
-        <div class="input-group">
-            <label>API Key de Google:</label>
-            <input type="text" id="apiKey" placeholder="Pega aquí tu API Key" value="AIzaSyBdTFn5HEMTCLCAx2TFQoSvNvm1tO7lVlk">
-        </div>
-        <button class="btn" onclick="saveConfig()">💾 Guardar Configuración</button>
-        <button class="btn" onclick="connectToDrive()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
-            🔐 Verificar Conexión
-        </button>
-        <button class="btn" onclick="loadFromDrive()" style="background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%);">
-            📥 Sincronizar desde Drive
-        </button>
-        
-        <div id="statusIndicator" class="status info" style="margin-top: 15px;">
-            ℹ️ Configura tu API Key y Folder ID, luego sincroniza
-        </div>
-        
-        <p style="font-size: 12px; color: #666; margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 5px;">
-            💡 <strong>Importante:</strong> La carpeta debe ser pública o compartida. 
-            Los dispositivos de pantalla se sincronizarán automáticamente cada 30 segundos.
-        </p>
-    </div>
+            <div class="config-section">
+                <h3>⚙️ Configuración de Google Drive</h3>
+                <div class="input-group">
+                    <label>ID de Carpeta de Google Drive:</label>
+                    <input type="text" id="folderId" placeholder="Pega aquí el ID de tu carpeta de Drive" value="1cRVI_EL8CWK4jPo9Ah8w57D_AKXl2W3C">
+                </div>
+                <div class="input-group">
+                    <label>API Key de Google:</label>
+                    <input type="text" id="apiKey" placeholder="Pega aquí tu API Key" value="AIzaSyBdTFn5HEMTCLCAx2TFQoSvNvm1tO7lVlk">
+                </div>
+                <div class="input-group">
+                    <label>Client ID de OAuth (para subir a Drive):</label>
+                    <input type="text" id="clientId" placeholder="Pega aquí tu Client ID de OAuth2" value="13787054723-t11dbqnd8lkv8m1dofjbn46lq7l78s32.apps.googleusercontent.com">
+                    <small style="color: #856404; display: block; margin-top: 5px; background: #fff3cd; padding: 8px; border-radius: 5px;">
+                        ⚠️ OAuth2 requiere hosting web (Netlify, Vercel, etc). En Google Cloud, configura los URIs con tu dominio.
+                    </small>
+                </div>
+                <button class="btn" onclick="saveConfig()">💾 Guardar Configuración</button>
+                
+                <div id="authSection" style="margin-top: 15px; display: none;">
+                    <button class="btn" onclick="authenticateWithGoogle()" style="background: linear-gradient(135deg, #ea4335 0%, #fbbc05 100%);">
+                        🔐 Conectar con Google Drive
+                    </button>
+                </div>
+                
+                <div id="connectedSection" style="margin-top: 15px; display: none;">
+                    <div style="background: #d4edda; padding: 15px; border-radius: 10px; margin-bottom: 10px;">
+                        <span style="color: #155724;">✅ Conectado como: <strong id="userEmail"></strong></span>
+                        <button onclick="signOut()" style="float: right; background: #dc3545; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer;">Desconectar</button>
+                    </div>
+                    <button class="btn" onclick="loadFromDrive()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                        📥 Cargar Imágenes desde Drive
+                    </button>
+                </div>
+            </div>
 
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">🖼️</div>
@@ -683,56 +691,14 @@
             });
         }
 
-        // Eliminar imagen (local y Drive si es necesario)
-        async function deleteImage(id) {
-            let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
-            const imageToDelete = images.find(img => img.id == id);
-            
-            if (!imageToDelete) return;
-            
-            const confirmMessage = imageToDelete.fromDrive 
-                ? '¿Eliminar también del Google Drive?'
-                : '¿Estás seguro de eliminar esta imagen?';
-                
-            if (confirm(confirmMessage)) {
-                // Si es de Drive, eliminar también del Drive
-                if (imageToDelete.fromDrive && imageToDelete.driveId) {
-                    await deleteFromDrive(imageToDelete.driveId);
-                }
-                
-                // Eliminar de localStorage
+        // Eliminar imagen
+        function deleteImage(id) {
+            if (confirm('¿Estás seguro de eliminar esta imagen?')) {
+                let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
                 images = images.filter(img => img.id !== id);
                 localStorage.setItem('displayImages', JSON.stringify(images));
                 loadImages();
                 showStatus('🗑️ Imagen eliminada correctamente', 'success');
-            }
-        }
-
-        // Eliminar archivo de Google Drive
-        async function deleteFromDrive(fileId) {
-            try {
-                const apiKey = localStorage.getItem('driveApiKey') || document.getElementById('apiKey').value;
-                
-                if (!apiKey) {
-                    alert('API Key no configurada');
-                    return;
-                }
-                
-                const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?key=${apiKey}`, {
-                    method: 'DELETE'
-                });
-                
-                if (response.ok) {
-                    console.log('✅ Archivo eliminado de Drive');
-                    showStatus('🗑️ Archivo eliminado de Drive', 'success');
-                } else {
-                    console.error('❌ Error eliminando de Drive:', response.status);
-                    showStatus('❌ Error eliminando de Drive. Verifica permisos.', 'error');
-                }
-                
-            } catch (error) {
-                console.error('❌ Error eliminando de Drive:', error);
-                showStatus('❌ Error eliminando de Drive: ' + error.message, 'error');
             }
         }
 
