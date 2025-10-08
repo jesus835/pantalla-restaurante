@@ -345,8 +345,10 @@
                 
                 if (isVideo) {
                     let videoSrc = media.data;
-                    if (media.fromDrive && media.webContentLink) {
-                        videoSrc = media.webContentLink;
+                    if (media.fromDrive && media.driveId) {
+                        // Usar proxy CORS para videos de Drive
+                        const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
+                        videoSrc = `https://corsproxy.io/?${encodeURIComponent(driveUrl)}`;
                     }
                     
                     item.innerHTML = `
@@ -457,11 +459,12 @@
                     video.play();
                 });
                 
-                // Para videos de Drive, usar webContentLink que funciona inmediatamente
+                // Para videos de Drive, usar proxy para evitar CORS
                 let videoSrc = media.data || media.url || '';
                 if (media.fromDrive && media.driveId) {
-                    // Usar webContentLink si está disponible, sino usar la URL guardada
-                    videoSrc = media.webContentLink || media.data || `https://drive.google.com/uc?export=download&id=${media.driveId}`;
+                    // Usar proxy CORS para videos de Drive
+                    const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
+                    videoSrc = `https://corsproxy.io/?${encodeURIComponent(driveUrl)}`;
                 }
                 
                 video.innerHTML = `

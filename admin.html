@@ -745,11 +745,12 @@
                     const isVideo = file.mimeType && file.mimeType.startsWith('video/');
                     const isImage = file.mimeType && file.mimeType.startsWith('image/');
                     
-                    // Para videos usar múltiples URLs, para imágenes usar proxy
+                    // Para videos usar proxy CORS, para imágenes usar proxy
                     let mediaUrl;
                     if (isVideo) {
-                        // Usar webContentLink que funciona inmediatamente para videos
-                        mediaUrl = file.webContentLink || `https://drive.google.com/uc?export=download&id=${file.id}`;
+                        // Usar proxy CORS para videos de Drive
+                        const driveUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                        mediaUrl = `https://corsproxy.io/?${encodeURIComponent(driveUrl)}`;
                     } else {
                         mediaUrl = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${file.id}`)}`;
                     }
