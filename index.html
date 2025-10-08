@@ -306,17 +306,29 @@
     </div>
 
     <script>
+        // Configuración de Drive (siempre carga desde aquí)
+        const DRIVE_API_KEY = 'AIzaSyBdTFn5HEMTCLCAx2TFQoSvNvm1tO7lVlk';
+        const DRIVE_FOLDER_ID = '1cRVI_EL8CWK4jPo9Ah8w57D_AKXl2W3C';
+
         let currentSlide = 0;
         let images = [];
         let isPlaying = false; // Desactivado por defecto
         let slideInterval;
         const SLIDE_DURATION = 5000; // 5 segundos por imagen
-        const REFRESH_INTERVAL = 10000; // Revisar nuevas imágenes cada 10 segundos
+        const REFRESH_INTERVAL = 5000; // Revisar nuevas imágenes cada 5 segundos
 
         // Inicializar
         window.addEventListener('load', () => {
-            loadImages();
-            loadSelectedMedia();
+            // Guardar configuración de Drive automáticamente
+            localStorage.setItem('driveApiKey', DRIVE_API_KEY);
+            localStorage.setItem('driveFolderId', DRIVE_FOLDER_ID);
+            
+            // Sincronizar desde Drive primero
+            syncFromDrive().then(() => {
+                loadImages();
+                loadSelectedMedia();
+            });
+            
             startAutoRefresh();
         });
 
@@ -340,12 +352,8 @@
                 item.className = 'media-item';
                 item.dataset.mediaId = media.id;
                 
-                // Determinar si es video (incluyendo GIFs animados)
-                const isVideo = media.isVideo || (media.name && (
-                    media.name.toLowerCase().includes('.mp4') || 
-                    media.name.toLowerCase().includes('.webm') ||
-                    media.name.toLowerCase().includes('.gif')
-                ));
+                // Determinar si es video
+                const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
                 
                 if (isVideo) {
                     let videoSrc = media.data;
@@ -439,98 +447,56 @@
             const slide = document.createElement('div');
             slide.className = 'slide active';
             
-            // Determinar si es video o imagen (incluyendo GIFs animados)
-            const isVideo = media.isVideo || (media.name && (
-                media.name.toLowerCase().includes('.mp4') || 
-                media.name.toLowerCase().includes('.webm') ||
-                media.name.toLowerCase().includes('.gif')
-            ));
+            // Determinar si es video o imagen
+            const isVideo = media.isVideo || (media.name && (media.name.toLowerCase().includes('.mp4') || media.name.toLowerCase().includes('.webm')));
             
             if (isVideo) {
-                // Mostrar botón de play/pause solo para videos (no GIFs)
-                if (!media.name.toLowerCase().includes('.gif')) {
-                    playPauseBtn.style.display = 'inline-block';
-                    playPauseBtn.textContent = '⏸ Pausar';
-                } else {
-                    playPauseBtn.style.display = 'none'; // GIFs no necesitan control
-                }
+                // Mostrar botón de play/pause para videos
+                playPauseBtn.style.display = 'inline-block';
+                playPauseBtn.textContent = '⏸ Pausar';
                 
-                // Crear elemento de video o img según el tipo
-                let mediaElement;
+                // Crear elemento de video
+                const video = document.createElement('video');
+                video.muted = true;
+                video.autoplay = true;
+                video.loop = true;
+                video.playsInline = true; // Para móviles
+                video.style.width = '100%';
+                video.style.height = '100%';
+                video.style.objectFit = 'contain';
                 
-                if (media.name.toLowerCase().includes('.gif')) {
-                    // Para GIFs, usar img tag (reproduce automáticamente)
-                    mediaElement = document.createElement('img');
-                    mediaElement.style.width = '100%';
-                    mediaElement.style.height = '100%';
-                    mediaElement.style.objectFit = 'contain';
-                    mediaElement.src = videoSrc;
-                    mediaElement.alt = media.name;
-                } else {
-                    // Para videos MP4/WebM, usar video tag
-                    mediaElement = document.createElement('video');
-                    mediaElement.muted = true;
-                    mediaElement.autoplay = true;
-                    mediaElement.loop = true;
-                    mediaElement.playsInline = true; // Para móviles
-                    mediaElement.style.width = '100%';
-                    mediaElement.style.height = '100%';
-                    mediaElement.style.objectFit = 'contain';
-                }
+                // Asegurar loop infinito
+                video.addEventListener('ended', () => {
+                    video.currentTime = 0;
+                    video.play();
+                });
                 
-                // Para videos/GIFs de Drive, usar proxy para evitar CORS
+                // Para videos de Drive, usar proxy para evitar CORS
                 let videoSrc = media.data || media.url || '';
                 if (media.fromDrive && media.driveId) {
-                    // Para GIFs, usar view directo (funciona mejor)
-                    if (media.name.toLowerCase().includes('.gif')) {
-                        videoSrc = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${media.driveId}`)}`;
-                    } else {
-                        // Para videos MP4/WebM, usar proxy
-                        const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
-                        videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
-                    }
+                    // Usar proxy CORS alternativo para videos de Drive
+                    const driveUrl = `https://drive.google.com/uc?export=download&id=${media.driveId}`;
+                    videoSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
                 }
                 
-                // Configurar según el tipo de archivo
-                if (media.name.toLowerCase().includes('.gif')) {
-                    // Para GIFs, usar img tag (reproduce automáticamente)
-                    mediaElement.src = videoSrc;
-                    mediaElement.alt = media.name;
-                    
-                    // Manejar errores de GIF
-                    mediaElement.addEventListener('error', (e) => {
-                        console.error('Error cargando GIF:', e);
-                        imageCounter.textContent = `❌ Error cargando GIF: ${media.name}`;
-                    });
-                } else {
-                    // Para videos MP4/WebM, usar video tag
-                    const video = mediaElement;
-                    
-                    // Asegurar loop infinito
-                    video.addEventListener('ended', () => {
-                        video.currentTime = 0;
-                        video.play();
-                    });
-                    
-                    video.innerHTML = `
-                        <source src="${videoSrc}" type="video/mp4">
-                        <source src="${videoSrc}" type="video/webm">
-                    `;
-                    
-                    // Forzar reproducción en loop
-                    video.addEventListener('loadeddata', () => {
-                        video.loop = true;
-                        video.play();
-                    });
-                    
-                    // Manejar errores de video
-                    video.addEventListener('error', (e) => {
-                        console.error('Error cargando video:', e);
-                        imageCounter.textContent = `❌ Error cargando video: ${media.name}`;
-                    });
-                }
+                video.innerHTML = `
+                    <source src="${videoSrc}" type="video/mp4">
+                    <source src="${videoSrc}" type="video/webm">
+                `;
                 
-                slide.appendChild(mediaElement);
+                // Forzar reproducción en loop
+                video.addEventListener('loadeddata', () => {
+                    video.loop = true;
+                    video.play();
+                });
+                
+                // Manejar errores de video
+                video.addEventListener('error', (e) => {
+                    console.error('Error cargando video:', e);
+                    imageCounter.textContent = `❌ Error cargando video: ${media.name}`;
+                });
+                
+                slide.appendChild(video);
             } else {
                 // Ocultar botón de play/pause para imágenes
                 playPauseBtn.style.display = 'none';
@@ -610,9 +576,68 @@
             }
         }
 
+        // Sincronizar desde Drive
+        async function syncFromDrive() {
+            try {
+                const apiKey = DRIVE_API_KEY;
+                const folderId = DRIVE_FOLDER_ID;
+                
+                // Cargar imágenes y videos desde Drive
+                const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+(mimeType+contains+'image/'+or+mimeType+contains+'video/')&key=${apiKey}&fields=files(id,name,mimeType,thumbnailLink,webContentLink)&supportsAllDrives=true`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.log('Error sincronizando:', data.error.message);
+                    return;
+                }
+                
+                let images = JSON.parse(localStorage.getItem('displayImages') || '[]');
+                
+                // Limpiar archivos anteriores de Drive para evitar duplicados
+                images = images.filter(img => !img.fromDrive);
+                
+                // Agregar referencias de Drive
+                for (const file of data.files) {
+                    const isVideo = file.mimeType && file.mimeType.startsWith('video/');
+                    const isImage = file.mimeType && file.mimeType.startsWith('image/');
+                    
+                    // Para videos usar proxy, para imágenes usar proxy
+                    let mediaUrl;
+                    if (isVideo) {
+                        const driveUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                        mediaUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(driveUrl)}`;
+                    } else {
+                        mediaUrl = `https://images.weserv.nl/?url=${encodeURIComponent(`https://drive.google.com/uc?export=view&id=${file.id}`)}`;
+                    }
+                    
+                    images.push({
+                        id: Date.now() + Math.random(),
+                        name: file.name,
+                        driveId: file.id,
+                        data: mediaUrl,
+                        uploadDate: new Date().toISOString(),
+                        fromDrive: true,
+                        isVideo: isVideo,
+                        isImage: isImage,
+                        webContentLink: file.webContentLink
+                    });
+                }
+                
+                localStorage.setItem('displayImages', JSON.stringify(images));
+                console.log('✅ Sincronizado desde Drive:', images.length, 'archivos');
+                
+            } catch (error) {
+                console.log('Error sincronizando desde Drive:', error.message);
+            }
+        }
+
         // Actualizar imágenes manualmente
         function refreshImages() {
-            loadImages();
+            syncFromDrive().then(() => {
+                loadImages();
+            });
             const status = document.getElementById('statusIndicator');
             status.textContent = '🔄 Actualizando...';
             setTimeout(() => {
@@ -620,16 +645,18 @@
             }, 1000);
         }
 
-        // Auto-refresh cada X segundos (solo actualiza la lista, no cambia la selección)
+        // Auto-refresh cada X segundos (sincroniza desde Drive)
         function startAutoRefresh() {
             setInterval(() => {
-                const storedImages = JSON.parse(localStorage.getItem('displayImages') || '[]');
-                if (JSON.stringify(storedImages) !== JSON.stringify(images)) {
-                    images = storedImages;
-                    // Si no hay media seleccionada, mostrar selector
-                    if (!localStorage.getItem('selectedMediaId')) {
-                        showNoMedia();
-                    }
+                // Sincronizar desde Drive cada 5 segundos
+                syncFromDrive();
+                
+                // Actualizar la lista local
+                loadImages();
+                
+                // Si no hay media seleccionada, mostrar selector
+                if (!localStorage.getItem('selectedMediaId')) {
+                    showNoMedia();
                 }
             }, REFRESH_INTERVAL);
         }
